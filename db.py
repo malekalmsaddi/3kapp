@@ -175,74 +175,29 @@ def get_ro_conn():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def init_db():
-    """Create the legacy single-tenant schema if it doesn't exist yet.
+    """Verify that the multi-tenant schema is in place.
 
-    The full multi-tenant schema is applied separately via
-    migrations/run_migration.py.  This function keeps backward compatibility
-    for local dev environments that haven't run the migration yet.
+    The full schema is applied via migrations/run_migration.py.
+    This function performs a lightweight check to confirm key tables exist.
     """
     try:
         with get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id        BIGSERIAL PRIMARY KEY,
-                        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        direction VARCHAR(10) NOT NULL
-                                  CHECK (direction IN ('inbound','outbound','queued')),
-                        phone     VARCHAR(20) NOT NULL,
-                        message   TEXT NOT NULL,
-                        status    VARCHAR(20) CHECK (status IN ('sent','failed','delivered','read')),
-                        CONSTRAINT valid_phone CHECK (phone ~ '^\\+[1-9]\\d{1,14}$')
-                    );
-                """)
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_messages_phone_timestamp
-                    ON messages (phone, timestamp DESC);
-                """)
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_messages_timestamp
-                    ON messages (timestamp DESC);
-                """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS user_threads (
-                        user_id     VARCHAR(255) PRIMARY KEY,
-                        thread_id   VARCHAR(255) NOT NULL,
-                        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        last_accessed TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    );
-                """)
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_user_threads_last_accessed
-                    ON user_threads (last_accessed);
-                """)
-                cur.execute("""
-                    ALTER TABLE messages
-                    ADD COLUMN IF NOT EXISTS sentiment VARCHAR(10)
-                    CHECK (sentiment IN ('positive','neutral','negative'));
-                """)
-                cur.execute("""
-                    ALTER TABLE user_threads
-                    ADD COLUMN IF NOT EXISTS escalation_status VARCHAR(20)
-                    NOT NULL DEFAULT 'bot'
-                    CHECK (escalation_status IN ('bot','escalated','resolved'));
-                """)
-                cur.execute("""
-                    ALTER TABLE user_threads
-                    ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMPTZ;
-                """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS admins (
-                        username      VARCHAR(255) PRIMARY KEY,
-                        password_hash VARCHAR(255) NOT NULL,
-                        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    );
-                """)
-        logger.info('🎉 Database schema initialized successfully')
+                cur.execute(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_name = 'tenants'"
+                )
+                if not cur.fetchone():
+                    raise RuntimeError(
+                        'Multi-tenant schema not found. '
+                        'Run: python migrations/run_migration.py'
+                    )
+        logger.info('Database schema verified')
+    except RuntimeError:
+        raise
     except Exception as e:
-        logger.error(f'🚨 Could not initialize the database schema: {e}')
-        raise RuntimeError('❌ Failed to set up the database.') from e
+        logger.error(f'Could not verify the database schema: {e}')
+        raise RuntimeError('Failed to verify database schema.') from e
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -263,21 +218,11 @@ def log_message(
     try:
         with get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Support both old schema (no tenant_id) and new schema
-                try:
-                    cur.execute(
-                        'INSERT INTO messages (tenant_id, timestamp, direction, phone, message, status) '
-                        'VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
-                        (tenant_id, timestamp, direction, phone, message, status),
-                    )
-                except psycopg2.errors.UndefinedColumn:
-                    # Migration not run yet — fall back to old schema
-                    conn.rollback()
-                    cur.execute(
-                        'INSERT INTO messages (timestamp, direction, phone, message, status) '
-                        'VALUES (%s, %s, %s, %s, %s) RETURNING id',
-                        (timestamp, direction, phone, message, status),
-                    )
+                cur.execute(
+                    'INSERT INTO messages (tenant_id, timestamp, direction, phone, message, status) '
+                    'VALUES (%s, %s, %s, %s, %s, %s) RETURNING id',
+                    (tenant_id, timestamp, direction, phone, message, status),
+                )
                 row = cur.fetchone()
                 return row['id'] if row else None
     except Exception as e:
@@ -295,32 +240,18 @@ def update_message_sentiment(
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                try:
-                    cur.execute(
-                        """
-                        UPDATE messages SET sentiment = %s
-                        WHERE id = (
-                            SELECT id FROM messages
-                            WHERE tenant_id = %s AND phone = %s
-                              AND direction = 'inbound' AND message = %s
-                            ORDER BY timestamp DESC LIMIT 1
-                        )
-                        """,
-                        (sentiment, tenant_id, phone, message),
+                cur.execute(
+                    """
+                    UPDATE messages SET sentiment = %s
+                    WHERE id = (
+                        SELECT id FROM messages
+                        WHERE tenant_id = %s AND phone = %s
+                          AND direction = 'inbound' AND message = %s
+                        ORDER BY timestamp DESC LIMIT 1
                     )
-                except psycopg2.errors.UndefinedColumn:
-                    conn.rollback()
-                    cur.execute(
-                        """
-                        UPDATE messages SET sentiment = %s
-                        WHERE id = (
-                            SELECT id FROM messages
-                            WHERE phone = %s AND direction = 'inbound' AND message = %s
-                            ORDER BY timestamp DESC LIMIT 1
-                        )
-                        """,
-                        (sentiment, phone, message),
-                    )
+                    """,
+                    (sentiment, tenant_id, phone, message),
+                )
     except Exception as e:
         logger.error(f'Failed to update message sentiment for {phone}: {e}')
 
@@ -338,45 +269,24 @@ def set_escalation_status(
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                try:
-                    cur.execute(
-                        """
-                        INSERT INTO user_threads (tenant_id, user_id, thread_id,
-                                                  escalation_status, escalated_at)
-                        VALUES (
-                            %s, %s, 'pending', %s,
-                            CASE WHEN %s = 'escalated' THEN NOW() ELSE NULL END
-                        )
-                        ON CONFLICT (tenant_id, user_id) DO UPDATE
-                        SET escalation_status = EXCLUDED.escalation_status,
-                            escalated_at = CASE
-                                WHEN EXCLUDED.escalation_status = 'escalated' THEN NOW()
-                                ELSE user_threads.escalated_at
-                            END,
-                            updated_at = NOW()
-                        """,
-                        (tenant_id, user_id, status, status),
+                cur.execute(
+                    """
+                    INSERT INTO user_threads (tenant_id, user_id, thread_id,
+                                              escalation_status, escalated_at)
+                    VALUES (
+                        %s, %s, 'pending', %s,
+                        CASE WHEN %s = 'escalated' THEN NOW() ELSE NULL END
                     )
-                except psycopg2.errors.UniqueViolation:
-                    conn.rollback()
-                    # Fall back to old schema ON CONFLICT (user_id)
-                    cur.execute(
-                        """
-                        INSERT INTO user_threads (user_id, thread_id, escalation_status, escalated_at)
-                        VALUES (
-                            %s, 'pending', %s,
-                            CASE WHEN %s = 'escalated' THEN NOW() ELSE NULL END
-                        )
-                        ON CONFLICT (user_id) DO UPDATE
-                        SET escalation_status = EXCLUDED.escalation_status,
-                            escalated_at = CASE
-                                WHEN EXCLUDED.escalation_status = 'escalated' THEN NOW()
-                                ELSE user_threads.escalated_at
-                            END,
-                            updated_at = NOW()
-                        """,
-                        (user_id, status, status),
-                    )
+                    ON CONFLICT (tenant_id, user_id) DO UPDATE
+                    SET escalation_status = EXCLUDED.escalation_status,
+                        escalated_at = CASE
+                            WHEN EXCLUDED.escalation_status = 'escalated' THEN NOW()
+                            ELSE user_threads.escalated_at
+                        END,
+                        updated_at = NOW()
+                    """,
+                    (tenant_id, user_id, status, status),
+                )
     except Exception as e:
         logger.error(f'Failed to set escalation status for {user_id}: {e}')
 
@@ -386,39 +296,22 @@ def get_escalated_threads(tenant_id: str = LEGACY_TENANT_ID) -> list:
     try:
         with get_ro_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                try:
-                    cur.execute(
-                        """
-                        SELECT ut.user_id, ut.thread_id, ut.escalated_at,
-                               m.message  AS last_message,
-                               m.timestamp AS last_msg_time
-                        FROM user_threads ut
-                        LEFT JOIN LATERAL (
-                            SELECT message, timestamp FROM messages
-                            WHERE tenant_id = %s AND phone = ut.user_id
-                            ORDER BY timestamp DESC LIMIT 1
-                        ) m ON true
-                        WHERE ut.tenant_id = %s AND ut.escalation_status = 'escalated'
-                        ORDER BY ut.escalated_at DESC
-                        """,
-                        (tenant_id, tenant_id),
-                    )
-                except psycopg2.errors.UndefinedColumn:
-                    conn.rollback()
-                    cur.execute(
-                        """
-                        SELECT ut.user_id, ut.thread_id, ut.escalated_at,
-                               m.message AS last_message, m.timestamp AS last_msg_time
-                        FROM user_threads ut
-                        LEFT JOIN LATERAL (
-                            SELECT message, timestamp FROM messages
-                            WHERE phone = ut.user_id
-                            ORDER BY timestamp DESC LIMIT 1
-                        ) m ON true
-                        WHERE ut.escalation_status = 'escalated'
-                        ORDER BY ut.escalated_at DESC
-                        """
-                    )
+                cur.execute(
+                    """
+                    SELECT ut.user_id, ut.thread_id, ut.escalated_at,
+                           m.message  AS last_message,
+                           m.timestamp AS last_msg_time
+                    FROM user_threads ut
+                    LEFT JOIN LATERAL (
+                        SELECT message, timestamp FROM messages
+                        WHERE tenant_id = %s AND phone = ut.user_id
+                        ORDER BY timestamp DESC LIMIT 1
+                    ) m ON true
+                    WHERE ut.tenant_id = %s AND ut.escalation_status = 'escalated'
+                    ORDER BY ut.escalated_at DESC
+                    """,
+                    (tenant_id, tenant_id),
+                )
                 return [dict(r) for r in cur.fetchall()]
     except Exception as e:
         logger.error(f'Failed to fetch escalated threads: {e}')
@@ -433,36 +326,20 @@ def get_messages_since_escalation(
     try:
         with get_ro_conn() as conn:
             with conn.cursor() as cur:
-                try:
-                    cur.execute(
-                        """
-                        SELECT m.message
-                        FROM messages m
-                        JOIN user_threads ut
-                          ON ut.tenant_id = %s AND ut.user_id = m.phone
-                        WHERE m.tenant_id = %s AND m.phone = %s
-                          AND m.direction = 'inbound'
-                          AND ut.escalated_at IS NOT NULL
-                          AND m.timestamp >= ut.escalated_at
-                        ORDER BY m.timestamp ASC
-                        """,
-                        (tenant_id, tenant_id, user_id),
-                    )
-                except psycopg2.errors.UndefinedColumn:
-                    conn.rollback()
-                    cur.execute(
-                        """
-                        SELECT m.message
-                        FROM messages m
-                        JOIN user_threads ut ON ut.user_id = m.phone
-                        WHERE m.phone = %s
-                          AND m.direction = 'inbound'
-                          AND ut.escalated_at IS NOT NULL
-                          AND m.timestamp >= ut.escalated_at
-                        ORDER BY m.timestamp ASC
-                        """,
-                        (user_id,),
-                    )
+                cur.execute(
+                    """
+                    SELECT m.message
+                    FROM messages m
+                    JOIN user_threads ut
+                      ON ut.tenant_id = %s AND ut.user_id = m.phone
+                    WHERE m.tenant_id = %s AND m.phone = %s
+                      AND m.direction = 'inbound'
+                      AND ut.escalated_at IS NOT NULL
+                      AND m.timestamp >= ut.escalated_at
+                    ORDER BY m.timestamp ASC
+                    """,
+                    (tenant_id, tenant_id, user_id),
+                )
                 return [row[0] for row in cur.fetchall()]
     except Exception as e:
         logger.error(f'Failed to get messages since escalation for {user_id}: {e}')
@@ -477,20 +354,13 @@ def get_user_escalation_status(
     try:
         with get_ro_conn() as conn:
             with conn.cursor() as cur:
-                try:
-                    cur.execute(
-                        """
-                        SELECT escalation_status FROM user_threads
-                        WHERE tenant_id = %s AND user_id = %s
-                        """,
-                        (tenant_id, user_id),
-                    )
-                except psycopg2.errors.UndefinedColumn:
-                    conn.rollback()
-                    cur.execute(
-                        'SELECT escalation_status FROM user_threads WHERE user_id = %s',
-                        (user_id,),
-                    )
+                cur.execute(
+                    """
+                    SELECT escalation_status FROM user_threads
+                    WHERE tenant_id = %s AND user_id = %s
+                    """,
+                    (tenant_id, user_id),
+                )
                 row = cur.fetchone()
                 return row[0] if row else 'bot'
     except Exception as e:
@@ -511,69 +381,39 @@ def get_or_create_thread_id(
     try:
         with get_conn() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                try:
+                cur.execute(
+                    """
+                    SELECT thread_id FROM user_threads
+                    WHERE tenant_id = %s AND user_id = %s
+                    FOR UPDATE
+                    """,
+                    (tenant_id, user_id),
+                )
+                row = cur.fetchone()
+                if row:
                     cur.execute(
                         """
-                        SELECT thread_id FROM user_threads
+                        UPDATE user_threads SET last_accessed = NOW()
                         WHERE tenant_id = %s AND user_id = %s
-                        FOR UPDATE
                         """,
                         (tenant_id, user_id),
                     )
-                    row = cur.fetchone()
-                    if row:
-                        cur.execute(
-                            """
-                            UPDATE user_threads SET last_accessed = NOW()
-                            WHERE tenant_id = %s AND user_id = %s
-                            """,
-                            (tenant_id, user_id),
-                        )
-                        return row['thread_id']
-                    thread = client_sync.beta.threads.create(
-                        extra_headers={'OpenAI-Beta': 'assistants=v2'}
-                    )
-                    cur.execute(
-                        """
-                        INSERT INTO user_threads (tenant_id, user_id, thread_id)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (tenant_id, user_id) DO UPDATE
-                            SET updated_at = NOW(), last_accessed = NOW()
-                        RETURNING thread_id
-                        """,
-                        (tenant_id, user_id, thread.id),
-                    )
-                    result = cur.fetchone()
-                    return result['thread_id']
-                except psycopg2.errors.UndefinedColumn:
-                    # Fall back to old single-tenant schema
-                    conn.rollback()
-                    cur.execute(
-                        'SELECT thread_id FROM user_threads WHERE user_id = %s FOR UPDATE',
-                        (user_id,),
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        cur.execute(
-                            'UPDATE user_threads SET last_accessed = NOW() WHERE user_id = %s',
-                            (user_id,),
-                        )
-                        return row['thread_id']
-                    thread = client_sync.beta.threads.create(
-                        extra_headers={'OpenAI-Beta': 'assistants=v2'}
-                    )
-                    cur.execute(
-                        """
-                        INSERT INTO user_threads (user_id, thread_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (user_id) DO UPDATE
-                            SET updated_at = NOW(), last_accessed = NOW()
-                        RETURNING thread_id
-                        """,
-                        (user_id, thread.id),
-                    )
-                    result = cur.fetchone()
-                    return result['thread_id']
+                    return row['thread_id']
+                thread = client_sync.beta.threads.create(
+                    extra_headers={'OpenAI-Beta': 'assistants=v2'}
+                )
+                cur.execute(
+                    """
+                    INSERT INTO user_threads (tenant_id, user_id, thread_id)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (tenant_id, user_id) DO UPDATE
+                        SET updated_at = NOW(), last_accessed = NOW()
+                    RETURNING thread_id
+                    """,
+                    (tenant_id, user_id, thread.id),
+                )
+                result = cur.fetchone()
+                return result['thread_id']
     except Exception as e:
         logger.error(f'⚠️ Unable to manage user thread record: {e}')
         raise RuntimeError('❌ Failed to manage user thread record') from e
@@ -582,38 +422,6 @@ def get_or_create_thread_id(
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth / user functions
 # ─────────────────────────────────────────────────────────────────────────────
-
-def get_admin(username: str) -> dict | None:
-    """Legacy: fetch admin by username.  Tries users table first, then admins."""
-    try:
-        with get_ro_conn() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Try new users table first
-                try:
-                    cur.execute(
-                        """
-                        SELECT id, email AS username, password_hash, role,
-                               tenant_id, email_verified, is_active
-                        FROM users WHERE email = %s
-                        """,
-                        (username,),
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        return dict(row)
-                except psycopg2.errors.UndefinedTable:
-                    pass
-                # Fall back to legacy admins table
-                cur.execute(
-                    'SELECT username, password_hash FROM admins WHERE username = %s',
-                    (username,),
-                )
-                row = cur.fetchone()
-                return dict(row) if row else None
-    except Exception as e:
-        logger.error(f"Failed to fetch admin '{username}': {e}")
-        return None
-
 
 def get_user_by_email(email: str) -> dict | None:
     """Fetch a user record by email (searches across all tenants)."""
@@ -784,7 +592,7 @@ def create_tenant(
                     """
                     INSERT INTO users (tenant_id, email, password_hash, role,
                                        email_verified, is_active)
-                    VALUES (%s, %s, %s, 'tenant_admin', FALSE, TRUE)
+                    VALUES (%s, %s, %s, 'tenant', FALSE, TRUE)
                     RETURNING *
                     """,
                     (tenant['id'], owner_email.lower().strip(), owner_password_hash),

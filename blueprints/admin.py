@@ -21,7 +21,6 @@ from db import (
 from logati import logger
 from redis_client import redis_connection, get_tenant_redis
 from utils import normalize_phone, send_whatsapp
-from sentiment import reset_neg_streak
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -73,40 +72,26 @@ def admin_dashboard():
     try:
         with get_conn() as conn:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            try:
-                cur.execute(
-                    """
-                    SELECT user_id, thread_id, last_accessed
-                    FROM user_threads
-                    WHERE tenant_id = %s
-                    ORDER BY last_accessed DESC
-                    """,
-                    (tenant_id,),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    "SELECT user_id, thread_id, last_accessed "
-                    "FROM user_threads ORDER BY last_accessed DESC"
-                )
+            cur.execute(
+                """
+                SELECT user_id, thread_id, last_accessed
+                FROM user_threads
+                WHERE tenant_id = %s
+                ORDER BY last_accessed DESC
+                """,
+                (tenant_id,),
+            )
             thread_map = [dict(r) for r in cur.fetchall()]
 
-            try:
-                cur.execute(
-                    """
-                    SELECT timestamp, direction, phone, message
-                    FROM messages
-                    WHERE tenant_id = %s
-                    ORDER BY timestamp DESC LIMIT 50
-                    """,
-                    (tenant_id,),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    "SELECT timestamp, direction, phone, message "
-                    "FROM messages ORDER BY timestamp DESC LIMIT 50"
-                )
+            cur.execute(
+                """
+                SELECT timestamp, direction, phone, message
+                FROM messages
+                WHERE tenant_id = %s
+                ORDER BY timestamp DESC LIMIT 50
+                """,
+                (tenant_id,),
+            )
             messages = [dict(r) for r in cur.fetchall()]
     except Exception as e:
         logger.error(f'Admin load error: {e}')
@@ -128,16 +113,10 @@ def delete_thread(thread_id):
     try:
         with get_conn() as conn:
             cur = conn.cursor()
-            try:
-                cur.execute(
-                    'DELETE FROM user_threads WHERE tenant_id = %s AND thread_id = %s',
-                    (tenant_id, thread_id),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    'DELETE FROM user_threads WHERE thread_id = %s', (thread_id,)
-                )
+            cur.execute(
+                'DELETE FROM user_threads WHERE tenant_id = %s AND thread_id = %s',
+                (tenant_id, thread_id),
+            )
 
         log_audit(
             tenant_id=tenant_id,
@@ -212,7 +191,8 @@ def resolve_escalation(user_number):
         return jsonify({'status': 'error', 'message': 'Invalid phone number'}), 400
 
     set_escalation_status(phone, 'bot', tenant_id=tenant_id)
-    reset_neg_streak(phone)
+    r = get_tenant_redis(tenant_id)
+    r.delete(f'neg_streak:{phone}')
 
     log_audit(
         tenant_id=tenant_id,

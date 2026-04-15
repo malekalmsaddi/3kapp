@@ -6,19 +6,18 @@ on every request and populates flask.g with:
   - g.user_id       (str)   user UUID
   - g.tenant_id     (str)   tenant UUID (None for super_admin)
   - g.tenant_slug   (str)   tenant slug
-  - g.role          (str)   'super_admin' | 'tenant_admin' | 'tenant_viewer'
+  - g.role          (str)   'super_admin' | 'tenant'
   - g.email         (str)   user email
   - g.authenticated (bool)  True if a valid JWT was decoded
 
 Public routes skip JWT decoding entirely.
-Legacy routes (Phase 1 shim) fall back to Flask session for backward compat.
 """
 import os
 import uuid
 from functools import wraps
 
 import jwt
-from flask import request, g, abort, session
+from flask import request, g, abort
 from logati import logger
 from redis_client import redis_connection
 
@@ -33,13 +32,10 @@ PUBLIC_PREFIXES = (
     '/api/v1/auth/signup',
     '/api/v1/auth/verify-email',
     '/api/v1/auth/refresh',
-)
-
-# Legacy routes that accept Flask session OR JWT (Phase 1 backward compat)
-LEGACY_SESSION_ROUTES = (
-    '/login', '/logout', '/dashboard', '/settings', '/send_template',
-    '/start_bulk_send', '/bulk_limits', '/progress/', '/task/',
-    '/send_email', '/admin/', '/get_templates', '/metrics',
+    '/v1/auth/login',       # Same routes via Next.js proxy (strips /api)
+    '/v1/auth/signup',
+    '/v1/auth/verify-email',
+    '/v1/auth/refresh',
 )
 
 
@@ -76,13 +72,8 @@ def init_jwt_middleware(app):
             try:
                 payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             except jwt.ExpiredSignatureError:
-                # If this is a legacy route, try session fallback
-                if any(path.startswith(p) for p in LEGACY_SESSION_ROUTES):
-                    return _try_legacy_session()
                 abort(401)
             except jwt.InvalidTokenError:
-                if any(path.startswith(p) for p in LEGACY_SESSION_ROUTES):
-                    return _try_legacy_session()
                 abort(401)
 
             # Check if token has been revoked
@@ -98,11 +89,7 @@ def init_jwt_middleware(app):
             g.authenticated = True
             return
 
-        # No JWT — try legacy Flask session for backward compat
-        if any(path.startswith(p) for p in LEGACY_SESSION_ROUTES):
-            return _try_legacy_session()
-
-        # No token, no session, not a public route
+        # No token, not a public route
         abort(401)
 
     @app.after_request
@@ -110,17 +97,6 @@ def init_jwt_middleware(app):
         if hasattr(request, 'correlation_id'):
             response.headers['X-Correlation-ID'] = request.correlation_id
         return response
-
-
-def _try_legacy_session():
-    """Phase 1 backward compat: accept Flask session['logged_in']."""
-    from db import LEGACY_TENANT_ID
-    if session.get('logged_in'):
-        g.tenant_id     = LEGACY_TENANT_ID
-        g.role          = 'tenant_admin'
-        g.authenticated = True
-        return
-    abort(401)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -137,25 +113,13 @@ def require_auth(fn):
     return wrapper
 
 
-def require_tenant_admin(fn):
-    """Require tenant_admin or super_admin role."""
+def require_tenant(fn):
+    """Require tenant or super_admin role."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not g.authenticated:
             abort(401)
-        if g.role not in ('tenant_admin', 'super_admin'):
-            abort(403)
-        return fn(*args, **kwargs)
-    return wrapper
-
-
-def require_tenant_viewer(fn):
-    """Require at least tenant_viewer role (viewer, admin, or super)."""
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not g.authenticated:
-            abort(401)
-        if g.role not in ('tenant_viewer', 'tenant_admin', 'super_admin'):
+        if g.role not in ('tenant', 'super_admin'):
             abort(403)
         return fn(*args, **kwargs)
     return wrapper

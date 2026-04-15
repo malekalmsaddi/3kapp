@@ -7,14 +7,19 @@ calling code.
 """
 import redis
 import os
+import ssl
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-pool = redis.ConnectionPool.from_url(
-    redis_url,
+
+_pool_kwargs = dict(
     socket_timeout=10,
     socket_connect_timeout=10,
     retry_on_timeout=True,
 )
+if redis_url.startswith("rediss://"):
+    _pool_kwargs["ssl_cert_reqs"] = ssl.CERT_NONE
+
+pool = redis.ConnectionPool.from_url(redis_url, **_pool_kwargs)
 redis_connection = redis.Redis(connection_pool=pool)
 
 RATELIMIT_STORAGE_URI = redis_url

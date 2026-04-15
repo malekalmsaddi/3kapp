@@ -4,17 +4,13 @@ tasks.py — Celery task definitions.
 All tasks accept tenant_id as their first positional argument.
 At the top of each task, tenant config is loaded and a TenantRedis
 wrapper is created for namespaced Redis operations.
-
-For backward compatibility during Phase 1, tasks also accept calls
-without tenant_id by treating the first argument as user_number if
-it doesn't look like a UUID.
 """
 import os
 import json
 import csv
 import io
-import re
 import redis
+import ssl
 import time
 from datetime import datetime, timezone
 from collections import defaultdict
@@ -51,15 +47,8 @@ if os.getenv('RUN_INIT_DB', 'false').lower() == 'true':
     init_db()
 
 REDIS_URL = os.getenv('REDIS_URL')
-
-def _add_ssl_cert_reqs(url: str) -> str:
-    if url and url.startswith('rediss://') and 'ssl_cert_reqs' not in url:
-        sep = '&' if '?' in url else '?'
-        return f'{url}{sep}ssl_cert_reqs=CERT_NONE'
-    return url
-
-CELERY_BROKER  = _add_ssl_cert_reqs(REDIS_URL)
-CELERY_BACKEND = _add_ssl_cert_reqs(REDIS_URL)
+CELERY_BROKER  = REDIS_URL
+CELERY_BACKEND = REDIS_URL
 
 TASK_TIMEOUTS = {
     'process_openai': (90, 100),
@@ -69,7 +58,8 @@ TASK_TIMEOUTS = {
 }
 
 celery_app = Celery('moeen_tasks', broker=CELERY_BROKER, backend=CELERY_BACKEND)
-celery_app.conf.update(
+
+_celery_conf = dict(
     task_serializer='json',
     result_serializer='json',
     accept_content=['json'],
@@ -80,6 +70,11 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     task_default_retry_delay=int(os.getenv('TASK_RETRY_DELAY', 30)),
 )
+if REDIS_URL and REDIS_URL.startswith('rediss://'):
+    _celery_conf['broker_use_ssl'] = {'ssl_cert_reqs': ssl.CERT_NONE}
+    _celery_conf['redis_backend_use_ssl'] = {'ssl_cert_reqs': ssl.CERT_NONE}
+
+celery_app.conf.update(**_celery_conf)
 
 def setup_loggers(logger_inst, *args, **kwargs):
     logger_inst.setLevel(os.getenv('CELERY_LOG_LEVEL', 'INFO'))
@@ -99,15 +94,6 @@ try:
     register_beat_schedule(celery_app)
 except Exception as e:
     logger.warning(f'Could not register beat schedule: {e}')
-
-# UUID pattern for detecting tenant_id in first arg
-_UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
-
-
-def _is_tenant_id(val: str) -> bool:
-    """Check if a string looks like a UUID (tenant_id) vs a phone number."""
-    return bool(_UUID_RE.match(val))
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tenant context loader
@@ -158,20 +144,9 @@ def _incr_daily_sent(tenant_redis=None) -> None:
 @shared_task(name='tasks.process_openai', bind=True, max_retries=3,
              soft_time_limit=TASK_TIMEOUTS['process_openai'][0],
              time_limit=TASK_TIMEOUTS['process_openai'][1])
-def process_openai(self, tenant_id: str, user_number: str, user_message: str = None):
+def process_openai(self, tenant_id: str, user_number: str, user_message: str = ''):
     """Process a user message via OpenAI and reply over WhatsApp."""
-    # Backward compat: old callers may pass (user_number, user_message) without tenant_id
-    if user_message is None and not _is_tenant_id(tenant_id):
-        user_message = user_number
-        user_number  = tenant_id
-        tenant_id    = LEGACY_TENANT_ID
-
-    try:
-        provider, config, r = _load_ai_provider(tenant_id)
-    except Exception as e:
-        logger.error(f'Failed to load AI provider for tenant {tenant_id}: {e}')
-        # Fall back to legacy path
-        return _legacy_process_openai(self, user_number, user_message)
+    provider, config, r = _load_ai_provider(tenant_id)
 
     try:
         # 1. Escalation gate
@@ -231,89 +206,14 @@ def process_openai(self, tenant_id: str, user_number: str, user_message: str = N
             notify_error(user_number, '⚠️ Something went wrong. Please try again.')
 
 
-def _legacy_process_openai(task, user_number, user_message):
-    """Fallback for when tenant config isn't available."""
-    from llm_utils import generate_with_openai
-    from sentiment import analyze_sentiment, reset_neg_streak
-
-    try:
-        escalation_status = get_user_escalation_status(user_number)
-        if escalation_status == 'escalated':
-            if redis_client.get(f'escalation_hold:{user_number}'):
-                return {'status': 'human_active', 'to': user_number}
-            else:
-                set_escalation_status(user_number, 'bot')
-                reset_neg_streak(user_number)
-                missed = get_messages_since_escalation(user_number)
-                if len(missed) > 1:
-                    user_message = (
-                        '[Context: user waited for team member]\n\n'
-                        + '\n'.join(f'- {m}' for m in missed)
-                    )
-
-        sentiment = analyze_sentiment(user_message)
-        update_message_sentiment(user_number, user_message, sentiment)
-
-        response = generate_with_openai(user_message, user_number, notify_fn=send_placeholder)
-
-        if response is None:
-            return {'status': 'escalated', 'to': user_number}
-        if response == '':
-            monitor_openai_thread_and_flush.delay(LEGACY_TENANT_ID, user_number)
-            return {'status': 'queued', 'to': user_number}
-
-        client = get_twilio_client()
-        from_whatsapp = f"whatsapp:{normalize_phone(TWILIO_WHATSAPP_NUMBER)}"
-        to_whatsapp   = f"whatsapp:{normalize_phone(user_number)}"
-        client.messages.create(from_=from_whatsapp, to=to_whatsapp, body=response)
-        log_message(datetime.now(timezone.utc).isoformat(), 'outbound', user_number, response)
-        return {'status': 'sent', 'to': user_number}
-
-    except SoftTimeLimitExceeded:
-        notify_error(user_number, '⚠️ Taking longer than expected.')
-        return {'status': 'timeout', 'to': user_number}
-    except Exception:
-        logger.exception('Legacy OpenAI task failed')
-        try:
-            task.retry(countdown=int(os.getenv('TASK_RETRY_DELAY', 10)))
-        except MaxRetriesExceededError:
-            notify_error(user_number, '⚠️ Something went wrong.')
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Task: monitor_openai_thread_and_flush
 # ─────────────────────────────────────────────────────────────────────────────
 
 @shared_task(name='tasks.monitor_openai_thread_and_flush')
-def monitor_openai_thread_and_flush(tenant_id: str, user_number: str = None):
-    # Backward compat
-    if user_number is None and not _is_tenant_id(tenant_id):
-        user_number = tenant_id
-        tenant_id   = LEGACY_TENANT_ID
-
-    try:
-        provider, config, r = _load_ai_provider(tenant_id)
-    except Exception:
-        # Legacy fallback
-        from llm_utils import get_or_create_thread_id, flush_queued_messages, poll_with_backoff, fetch_response
-        from utils import has_active_run, openai_client
-        thread_id = get_or_create_thread_id(user_number)
-        for _ in range(15):
-            if not has_active_run(thread_id, redis_client, client=openai_client):
-                break
-            time.sleep(5)
-        redis_client.delete(f'active_run:thread:{thread_id}')
-        run = flush_queued_messages(thread_id, user_number)
-        if run:
-            try:
-                run = poll_with_backoff(thread_id, run.id, user_number)
-                response = fetch_response(thread_id, run.id)
-                if response:
-                    send_whatsapp(user_number, response)
-                    log_message(datetime.now(timezone.utc).isoformat(), 'outbound', user_number, response)
-            except Exception as e:
-                logger.exception(f'Legacy flush error: {e}')
-        return
+def monitor_openai_thread_and_flush(tenant_id: str, user_number: str = ''):
+    """Wait for an active OpenAI run to complete, then flush queued messages."""
+    provider, config, r = _load_ai_provider(tenant_id)
 
     thread_id = provider.get_or_create_thread(user_number)
 
@@ -352,24 +252,13 @@ def monitor_openai_thread_and_flush(tenant_id: str, user_number: str = None):
                  soft_time_limit=TASK_TIMEOUTS['process_bulk'][0],
                  time_limit=TASK_TIMEOUTS['process_bulk'][1])
 def send_bulk_contacts(self, tenant_id: str, payload: list, content_sid: str = None):
-    # Backward compat
-    if isinstance(tenant_id, list):
-        content_sid = payload if isinstance(payload, str) else content_sid
-        payload     = tenant_id
-        tenant_id   = LEGACY_TENANT_ID
-
-    try:
-        r = get_tenant_redis(tenant_id)
-        from services.tenant_service import load_tenant_context
-        config, _ = load_tenant_context(tenant_id)
-        bulk_max_batch = int(config.get('bulk_max_batch', BULK_MAX_BATCH))
-        bulk_daily_cap = int(config.get('bulk_daily_cap', BULK_DAILY_CAP))
-        bulk_msg_delay = float(config.get('bulk_msg_delay_sec', BULK_MSG_DELAY))
-    except Exception:
-        r = redis_client
-        bulk_max_batch = BULK_MAX_BATCH
-        bulk_daily_cap = BULK_DAILY_CAP
-        bulk_msg_delay = BULK_MSG_DELAY
+    """Send bulk WhatsApp template messages for a tenant."""
+    r = get_tenant_redis(tenant_id)
+    from services.tenant_service import load_tenant_context
+    config, _ = load_tenant_context(tenant_id)
+    bulk_max_batch = int(config.get('bulk_max_batch', BULK_MAX_BATCH))
+    bulk_daily_cap = int(config.get('bulk_daily_cap', BULK_DAILY_CAP))
+    bulk_msg_delay = float(config.get('bulk_msg_delay_sec', BULK_MSG_DELAY))
 
     total = len(payload)
 
@@ -454,23 +343,13 @@ def send_bulk_contacts(self, tenant_id: str, payload: list, content_sid: str = N
              soft_time_limit=TASK_TIMEOUTS['send_template'][0],
              time_limit=TASK_TIMEOUTS['send_template'][1])
 def send_whatsapp_template(self, tenant_id: str, to: str, params: dict = None, content_sid: str = None):
-    # Backward compat
-    if params is None and isinstance(to, dict):
-        params = to
-        to = tenant_id
-        tenant_id = LEGACY_TENANT_ID
-
-    try:
-        r = get_tenant_redis(tenant_id)
-        from services.tenant_service import load_tenant_context
-        config, _ = load_tenant_context(tenant_id)
-        whatsapp_num = config.get('twilio_whatsapp_number') or TWILIO_WHATSAPP_NUMBER
-        service_sid  = config.get('twilio_service_sid') or TWILIO_SERVICE_SID
-        template_sid = content_sid or config.get('extra', {}).get('template_content_sid') or TEMPLATE_CONTENT_SID
-    except Exception:
-        whatsapp_num = TWILIO_WHATSAPP_NUMBER
-        service_sid  = TWILIO_SERVICE_SID
-        template_sid = content_sid or TEMPLATE_CONTENT_SID
+    """Send a single WhatsApp template message for a tenant."""
+    r = get_tenant_redis(tenant_id)
+    from services.tenant_service import load_tenant_context
+    config, _ = load_tenant_context(tenant_id)
+    whatsapp_num = config.get('twilio_whatsapp_number') or TWILIO_WHATSAPP_NUMBER
+    service_sid  = config.get('twilio_service_sid') or TWILIO_SERVICE_SID
+    template_sid = content_sid or config.get('extra', {}).get('template_content_sid') or TEMPLATE_CONTENT_SID
 
     try:
         client = get_twilio_client()
@@ -512,11 +391,7 @@ def send_whatsapp_template(self, tenant_id: str, to: str, params: dict = None, c
 @shared_task(bind=True, max_retries=2,
              soft_time_limit=TASK_TIMEOUTS['process_bulk'][0],
              time_limit=TASK_TIMEOUTS['process_bulk'][1])
-def process_bulk_file(self, tenant_id: str, file_contents: str = None):
-    # Backward compat
-    if file_contents is None and not _is_tenant_id(tenant_id):
-        file_contents = tenant_id
-        tenant_id     = LEGACY_TENANT_ID
+def process_bulk_file(self, tenant_id: str, file_contents: str = ''):
 
     results = defaultdict(list)
     reader = csv.DictReader(io.StringIO(file_contents))

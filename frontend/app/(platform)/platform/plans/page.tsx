@@ -19,7 +19,7 @@ export default function PlatformPlansPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/platform/plans', { credentials: 'include' })
+    fetch('/api/platform/plans', { credentials: 'include' })
       .then((res) => res.json())
       .then(setPlans)
       .catch(() => {})

@@ -16,23 +16,22 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const body = new URLSearchParams({ username, password });
     try {
-      const res = await fetch('/api/login', {
+      const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
-        body,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ email: username, password }),
       });
+      const data = await res.json();
       if (res.ok) {
-        router.replace('/dashboard');
-      } else {
-        try {
-          const data = await res.json();
-          setError(data.message || 'Invalid credentials');
-        } catch {
-          setError('Invalid credentials');
+        if (data.role === 'super_admin') {
+          router.replace('/platform/tenants');
+        } else {
+          router.replace('/dashboard');
         }
+      } else {
+        setError(data.message || 'Invalid credentials');
       }
     } catch {
       setError('Connection error. Please try again.');
@@ -109,23 +108,24 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Username */}
+            {/* Email */}
             <div className="space-y-2">
               <label
                 className="block text-xs font-bold tracking-widest uppercase"
                 style={{ color: 'var(--text-dim)' }}
               >
-                Username
+                Email
               </label>
               <input
-                id="username"
-                name="username"
-                autoComplete="username"
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 onFocus={() => setFocused('username')}
                 onBlur={() => setFocused(null)}
-                placeholder="Enter your username"
+                placeholder="you@company.com"
                 required
                 className="w-full px-4 py-3 text-sm rounded-xl outline-none"
                 style={inputStyle('username')}

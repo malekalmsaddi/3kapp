@@ -14,7 +14,7 @@ export default function PlatformUsagePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/platform/usage', { credentials: 'include' })
+    fetch('/api/platform/usage', { credentials: 'include' })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load usage');
         return res.json();

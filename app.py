@@ -9,6 +9,7 @@ All route logic lives in blueprints/. This file handles:
   - DB initialization
 """
 import os
+import ssl
 import threading
 import time
 
@@ -25,8 +26,8 @@ load_dotenv()
 # Required env vars
 # ─────────────────────────────────────────────────────────────────────────────
 REQUIRED_ENV = [
-    'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_NUMBER',
-    'OPENAI_API_KEY', 'ASSISTANT_ID', 'REDIS_URL', 'FLASK_SECRET_KEY',
+    'DATABASE_URL', 'REDIS_URL', 'FLASK_SECRET_KEY',
+    'JWT_SECRET_KEY', 'ENCRYPTION_KEY',
 ]
 missing = [v for v in REQUIRED_ENV if not os.getenv(v)]
 if missing:
@@ -56,9 +57,15 @@ except Exception as e:
 # ─────────────────────────────────────────────────────────────────────────────
 # Rate limiter
 # ─────────────────────────────────────────────────────────────────────────────
+_redis_url = os.getenv('REDIS_URL')
+_storage_options = {}
+if _redis_url and _redis_url.startswith('rediss://'):
+    _storage_options['ssl_cert_reqs'] = ssl.CERT_NONE
+
 limiter = Limiter(
     key_func=get_remote_address,
-    storage_uri=os.getenv('REDIS_URL'),
+    storage_uri=_redis_url,
+    storage_options=_storage_options,
     default_limits=['200 per day', '50 per hour'],
 )
 limiter.init_app(app)
@@ -83,7 +90,9 @@ from blueprints.onboarding import onboarding_bp
 
 # ── Versioned API routes (new) ──────────────────────────────────────────────
 app.register_blueprint(auth_bp,       url_prefix='/api/v1/auth')
+app.register_blueprint(auth_bp,       url_prefix='/v1/auth', name='auth_v1_proxy')
 app.register_blueprint(onboarding_bp, url_prefix='/api/v1/onboarding')
+app.register_blueprint(onboarding_bp, url_prefix='/v1/onboarding', name='onboarding_v1_proxy')
 app.register_blueprint(platform_bp,   url_prefix='/platform')
 
 # ── Webhook routes (no prefix — /whatsapp/<slug> must be at root) ───────────
@@ -111,60 +120,6 @@ limiter.limit('20 per minute')(messaging_bp)
 
 # Exempt health check from rate limiting
 limiter.exempt(settings_bp)  # /health lives here and needs to be exempt
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Legacy login/logout routes (backward compat for existing frontend)
-# These map the old form-encoded /login and /logout to the new auth blueprint.
-# ─────────────────────────────────────────────────────────────────────────────
-from flask import request as flask_request, session, jsonify as flask_jsonify
-import bcrypt
-from db import get_admin
-
-
-@app.route('/login', methods=['POST'])
-@limiter.limit('5 per minute')
-def legacy_login():
-    """Legacy login endpoint for backward compatibility."""
-    user = flask_request.form.get('username', '').strip()
-    pw   = flask_request.form.get('password', '').strip()
-
-    valid = False
-    try:
-        admin = get_admin(user)
-        if admin:
-            valid = bcrypt.checkpw(pw.encode(), admin['password_hash'].encode())
-    except Exception as e:
-        logger.error(f'❌ Login error: {e}')
-
-    if valid:
-        session['logged_in'] = True
-        # Also try to issue JWT if user exists in new users table
-        from db import get_user_by_email
-        db_user = get_user_by_email(user)
-        if db_user:
-            from services.auth_service import create_access_token, create_refresh_token
-            access  = create_access_token(db_user)
-            refresh = create_refresh_token(db_user)
-            resp = flask_jsonify({'status': 'ok'})
-            secure = os.getenv('FLASK_ENV', 'production') == 'production'
-            resp.set_cookie('access_token', access,
-                            httponly=True, secure=secure, samesite='Lax', max_age=86400)
-            resp.set_cookie('refresh_token', refresh,
-                            httponly=True, secure=secure, samesite='Strict',
-                            max_age=604800, path='/api/v1/auth/refresh')
-            return resp
-        return flask_jsonify({'status': 'ok'}), 200
-    return flask_jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
-
-
-@app.route('/logout', methods=['POST'])
-def legacy_logout():
-    session.clear()
-    resp = flask_jsonify({'status': 'ok'})
-    resp.delete_cookie('access_token')
-    resp.delete_cookie('refresh_token', path='/api/v1/auth/refresh')
-    return resp
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Heartbeat thread

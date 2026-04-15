@@ -80,7 +80,7 @@ def check_admin_count(tenant_id: str) -> bool:
     with get_conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                "SELECT COUNT(*) AS n FROM users WHERE tenant_id = %s AND role = 'tenant_admin'",
+                "SELECT COUNT(*) AS n FROM users WHERE tenant_id = %s AND role = 'tenant'",
                 (tenant_id,),
             )
             current = cur.fetchone()['n']

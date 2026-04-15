@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, abort
 from twilio.request_validator import RequestValidator
 
-from db import log_message, LEGACY_TENANT_ID
+from db import log_message
 from logati import logger
-from redis_client import redis_connection, get_tenant_redis
+from redis_client import get_tenant_redis
 from services.tenant_service import resolve_tenant_by_slug, get_effective_config_value
 from utils import normalize_phone
 
@@ -91,43 +91,7 @@ def whatsapp_webhook_tenant(tenant_slug: str):
     return 'OK', 200
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Legacy webhook (backward compat — routes to default tenant)
-# ─────────────────────────────────────────────────────────────────────────────
-
 @webhook_bp.route('/whatsapp', methods=['POST'])
 def whatsapp_webhook_legacy():
-    """Legacy single-tenant webhook — routes everything to the default tenant."""
-    validator = RequestValidator(TWILIO_AUTH_TOKEN)
-    signature = request.headers.get('X-Twilio-Signature', '')
-    if not validator.validate(request.url, request.form, signature):
-        logger.warning('❌ Invalid Twilio signature on legacy /whatsapp')
-        abort(403)
-
-    msg      = request.form.get('Body', '').strip()
-    user_raw = request.form.get('From', '').strip()
-    user     = normalize_phone(user_raw)
-
-    if user == normalize_phone(TWILIO_WHATSAPP_NUMBER):
-        return 'Ignored status callback', 200
-
-    if not msg or not user:
-        return 'Ignored invalid message', 200
-
-    message_sid = request.form.get('MessageSid') or request.form.get('SmsSid', '')
-    if message_sid:
-        dedup_key = f'msg:{message_sid}'
-        if redis_connection.get(dedup_key):
-            return 'Duplicate', 200
-        redis_connection.set(dedup_key, 'processed', ex=3600)
-
-    timestamp = datetime.now(timezone.utc).isoformat()
-    log_message(timestamp, 'inbound', user, msg, tenant_id=LEGACY_TENANT_ID)
-
-    try:
-        from tasks import process_openai
-        process_openai.delay(LEGACY_TENANT_ID, user, msg)
-    except Exception as e:
-        logger.error(f'❌ Legacy webhook dispatch failed: {e}', exc_info=True)
-
-    return 'OK', 200
+    """Legacy endpoint removed — all webhooks must use /whatsapp/<tenant_slug>."""
+    abort(410)

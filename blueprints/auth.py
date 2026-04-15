@@ -10,14 +10,13 @@ blueprints/auth.py — Authentication endpoints.
 """
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from flask import Blueprint, request, jsonify, g, session
 
 from db import (
     get_user_by_email, create_tenant, update_user_last_login,
-    get_user_by_id, get_admin, log_audit, LEGACY_TENANT_ID,
+    get_user_by_id, log_audit,
 )
 from services.auth_service import (
     create_access_token, create_refresh_token,
@@ -42,16 +41,8 @@ def login():
     if not email or not password:
         return jsonify({'status': 'error', 'message': 'Email and password required'}), 400
 
-    # Try new users table first
     user = get_user_by_email(email)
-
     if not user:
-        # Fall back to legacy admins table for Phase 1 backward compat
-        admin = get_admin(email)
-        if admin and bcrypt.checkpw(password.encode(), admin['password_hash'].encode()):
-            # Legacy admin login — set Flask session for backward compat
-            session['logged_in'] = True
-            return jsonify({'status': 'ok'}), 200
         return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
     # Validate password
@@ -95,8 +86,6 @@ def login():
         samesite='Strict', max_age=604800,
         path='/api/v1/auth/refresh',
     )
-    # Also set legacy session for backward compat
-    session['logged_in'] = True
     return resp
 
 

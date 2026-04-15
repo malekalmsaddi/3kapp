@@ -54,54 +54,34 @@ def dashboard():
     try:
         with get_conn() as conn:
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            try:
-                cur.execute(
-                    """
-                    SELECT phone, direction, timestamp, message, sentiment
-                    FROM messages
-                    WHERE tenant_id = %s
-                    ORDER BY phone, timestamp
-                    LIMIT 2000
-                    """,
-                    (tenant_id,),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    "SELECT phone, direction, timestamp, message, sentiment "
-                    "FROM messages ORDER BY phone, timestamp LIMIT 2000"
-                )
+            cur.execute(
+                """
+                SELECT phone, direction, timestamp, message, sentiment
+                FROM messages
+                WHERE tenant_id = %s
+                ORDER BY phone, timestamp
+                LIMIT 2000
+                """,
+                (tenant_id,),
+            )
             for r in cur.fetchall():
                 conversations.setdefault(r['phone'], []).append(dict(r))
 
-            try:
-                cur.execute(
-                    """
-                    SELECT DISTINCT ON (m.phone)
-                           m.phone,
-                           m.timestamp AS last_seen,
-                           m.message   AS last_message,
-                           COALESCE(ut.escalation_status, 'bot') AS escalation_status
-                    FROM messages m
-                    LEFT JOIN user_threads ut
-                      ON ut.tenant_id = %s AND ut.user_id = m.phone
-                    WHERE m.tenant_id = %s
-                    ORDER BY m.phone, m.timestamp DESC
-                    """,
-                    (tenant_id, tenant_id),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    """
-                    SELECT DISTINCT ON (m.phone)
-                           m.phone, m.timestamp AS last_seen, m.message AS last_message,
-                           COALESCE(ut.escalation_status, 'bot') AS escalation_status
-                    FROM messages m
-                    LEFT JOIN user_threads ut ON ut.user_id = m.phone
-                    ORDER BY m.phone, m.timestamp DESC
-                    """
-                )
+            cur.execute(
+                """
+                SELECT DISTINCT ON (m.phone)
+                       m.phone,
+                       m.timestamp AS last_seen,
+                       m.message   AS last_message,
+                       COALESCE(ut.escalation_status, 'bot') AS escalation_status
+                FROM messages m
+                LEFT JOIN user_threads ut
+                  ON ut.tenant_id = %s AND ut.user_id = m.phone
+                WHERE m.tenant_id = %s
+                ORDER BY m.phone, m.timestamp DESC
+                """,
+                (tenant_id, tenant_id),
+            )
             users = sorted(
                 [dict(r) for r in cur.fetchall()],
                 key=lambda x: x['last_seen'],
@@ -137,26 +117,15 @@ def dashboard_data():
     try:
         with get_conn() as conn:
             cur = conn.cursor()
-            try:
-                cur.execute(
-                    """
-                    SELECT date_trunc('minute', timestamp) AS minute, direction, COUNT(*)
-                    FROM messages
-                    WHERE tenant_id = %s AND timestamp >= NOW() - INTERVAL '10 minutes'
-                    GROUP BY minute, direction
-                    """,
-                    (tenant_id,),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    """
-                    SELECT date_trunc('minute', timestamp) AS minute, direction, COUNT(*)
-                    FROM messages
-                    WHERE timestamp >= NOW() - INTERVAL '10 minutes'
-                    GROUP BY minute, direction
-                    """
-                )
+            cur.execute(
+                """
+                SELECT date_trunc('minute', timestamp) AS minute, direction, COUNT(*)
+                FROM messages
+                WHERE tenant_id = %s AND timestamp >= NOW() - INTERVAL '10 minutes'
+                GROUP BY minute, direction
+                """,
+                (tenant_id,),
+            )
             for minute, direction, count in cur.fetchall():
                 label = minute.strftime('%H:%M')
                 if direction == 'inbound':
@@ -164,19 +133,13 @@ def dashboard_data():
                 else:
                     outbound_counts[label] = count
 
-            try:
-                cur.execute(
-                    """
-                    SELECT COUNT(*) FROM user_threads
-                    WHERE tenant_id = %s AND escalation_status = 'escalated'
-                    """,
-                    (tenant_id,),
-                )
-            except Exception:
-                conn.rollback()
-                cur.execute(
-                    "SELECT COUNT(*) FROM user_threads WHERE escalation_status = 'escalated'"
-                )
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM user_threads
+                WHERE tenant_id = %s AND escalation_status = 'escalated'
+                """,
+                (tenant_id,),
+            )
             escalated_count = cur.fetchone()[0]
     except Exception as e:
         logger.error(f'📊 [dashboard_data] error: {e}', exc_info=True)

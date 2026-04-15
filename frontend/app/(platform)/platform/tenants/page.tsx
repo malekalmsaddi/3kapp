@@ -21,7 +21,7 @@ export default function PlatformTenantsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/platform/tenants', { credentials: 'include' })
+    fetch('/api/platform/tenants', { credentials: 'include' })
       .then((res) => {
         if (res.status === 403) throw new Error('Access denied — super admin only');
         if (!res.ok) throw new Error('Failed to load tenants');
@@ -34,7 +34,7 @@ export default function PlatformTenantsPage() {
 
   async function handleAction(tenantId: string, action: 'suspend' | 'activate') {
     try {
-      const res = await fetch(`/platform/tenants/${tenantId}/${action}`, {
+      const res = await fetch(`/api/platform/tenants/${tenantId}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });

@@ -7,7 +7,7 @@ Multi-tenant WhatsApp AI assistant platform. Flask backend, Next.js frontend, Ce
 ### Tenant Model
 - All data scoped by `tenant_id` (UUID foreign key)
 - Default/legacy tenant: `00000000-0000-0000-0000-000000000001` (slug: `moeen`)
-- Roles: `super_admin` (platform), `tenant_admin`, `tenant_viewer`
+- Roles: `super_admin` (platform), `tenant`
 
 ### Backend Structure
 ```

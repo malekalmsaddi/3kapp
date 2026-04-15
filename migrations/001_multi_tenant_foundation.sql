@@ -112,8 +112,8 @@ CREATE TABLE IF NOT EXISTS users (
     email                     VARCHAR(255) NOT NULL,
     password_hash             VARCHAR(255) NOT NULL,
     full_name                 VARCHAR(255),
-    role                      VARCHAR(20) NOT NULL DEFAULT 'tenant_admin'
-                              CHECK (role IN ('super_admin','tenant_admin','tenant_viewer')),
+    role                      VARCHAR(20) NOT NULL DEFAULT 'tenant'
+                              CHECK (role IN ('super_admin','tenant')),
     email_verified            BOOLEAN NOT NULL DEFAULT FALSE,
     email_verify_token        VARCHAR(255),
     email_verify_expires_at   TIMESTAMPTZ,
@@ -353,7 +353,7 @@ SELECT
     '00000000-0000-0000-0000-000000000001'::uuid,
     username,       -- username treated as email (may not be email format — that's OK)
     password_hash,
-    'tenant_admin',
+    'tenant',
     TRUE,           -- existing admins are pre-verified
     created_at
 FROM admins
