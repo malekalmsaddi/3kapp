@@ -1,0 +1,21 @@
+# flyctl launch added from .gitignore
+# .gitignore
+**/.env
+**/__pycache__
+**/*.pyc
+**/messages.db
+**/venv
+
+# flyctl launch added from venv/.gitignore
+# Created by venv; see https://docs.python.org/3/library/venv.html
+venv/**/*
+**/fly_secrets.rtf
+**/calendar_credentials.b64
+**/calendar_credentials.json
+**/moeencalendarbot-826e5f6d7209.json
+**/tests
+
+# Frontend build artifacts and dependencies (excluded from Docker context)
+frontend/node_modules
+frontend/.next
+frontend/tsconfig.tsbuildinfo

@@ -1,0 +1,52 @@
+app = "moeen-ai"
+primary_region = "lax"
+kill_signal = "SIGINT"
+kill_timeout = 60
+
+[build]
+dockerfile = "Dockerfile"
+
+[env]
+PORT = "8080"
+
+[processes]
+web = "gunicorn -b 0.0.0.0:8080 app:app --workers 1 --threads 2"
+celery = "celery -A tasks worker --concurrency=1 --max-tasks-per-child=100 --loglevel=info"
+
+[http_service]
+internal_port = 8080
+force_https = true
+processes = ["web"]
+
+[[http_service.ports]]
+handlers = ["http"]
+port = 80
+
+[[http_service.ports]]
+handlers = ["tls", "http"]
+port = 443
+
+[[http_service.checks]]
+interval = "30s"
+grace_period = "45s"
+method = "GET"
+path = "/health"
+timeout = "10s"
+
+[deploy]
+strategy = "rolling"
+
+[experimental]
+  auto_rollback = true
+
+[[vm]]
+size = "shared-cpu-2x"
+memory = "2gb"
+processes = ["web"]
+count = 2
+
+[[vm]]
+size = "shared-cpu-2x"
+memory = "2gb"
+processes = ["celery"]
+count = 1

@@ -1,0 +1,36 @@
+    {
+        "type": "function",
+        "function": {
+            "name": "create_calendar_event",
+            "description": "Schedule a meeting or event in the user's Google Calendar",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Meeting Between Kulassa and {{User}}, including collected contact details"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "A summary about the meeting goal of the user"
+                    },
+                    "start_time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "The start time in ISO 8601 format"
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "The end time in ISO 8601 format"
+                    },
+                    "contact_email": {
+                        "type": "string",
+                        "format": "email",
+                        "description": "Email address of the contact person (optional)"
+                    }
+                },
+                "required": ["title", "start_time", "end_time"]
+            }
+        }
+    }

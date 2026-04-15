@@ -1,0 +1,185 @@
+@import 'tailwindcss';
+
+:root {
+  /* ── Backgrounds ─────────────────────────────── */
+  --bg: #f8f3f3;
+  --bg-surface: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-panel-hover: #fef6f6;
+  --bg-nav: rgba(255, 255, 255, 0.97);
+
+  /* ── Brand: Deep Red ─────────────────────────── */
+  --accent: #b00909;
+  --accent-light: #d41111;
+  --accent-hover: #8f0707;
+  --accent-glow: rgba(176, 9, 9, 0.14);
+  --accent-glow-strong: rgba(176, 9, 9, 0.30);
+
+  /* ── Spectrum: Red → Red-violet → Violet ──────── */
+  --red-violet: #891565;
+  --violet: #6d1f9e;
+  --grad-main: linear-gradient(135deg, #b00909 0%, #891565 55%, #6d1f9e 100%);
+
+  /* ── Text ────────────────────────────────────── */
+  --text: #111827;
+  --text-muted: #4b5563;
+  --text-dim: #6b7280;
+
+  /* ── Borders ─────────────────────────────────── */
+  --border: rgba(176, 9, 9, 0.16);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-glass: rgba(0, 0, 0, 0.08);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), 'Inter', sans-serif;
+  --font-mono: var(--font-geist-mono);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ── Warm Aurora (very subtle in light mode) ─────────────────────── */
+.aurora-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+}
+
+.aurora-blob-1 {
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(176, 9, 9, 0.09) 0%, transparent 70%);
+  top: -300px;
+  left: -200px;
+  animation: aurora-1 30s ease-in-out infinite alternate;
+}
+
+.aurora-blob-2 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(137, 21, 101, 0.07) 0%, transparent 70%);
+  bottom: -150px;
+  right: -100px;
+  animation: aurora-2 24s ease-in-out infinite alternate;
+}
+
+.aurora-blob-3 {
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(109, 31, 158, 0.05) 0%, transparent 70%);
+  top: 45%;
+  right: 25%;
+  animation: aurora-3 20s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-1 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(90px, 70px) scale(1.18);
+  }
+}
+@keyframes aurora-2 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-70px, -90px) scale(1.12);
+  }
+}
+@keyframes aurora-3 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(50px, -60px) scale(0.88);
+  }
+}
+
+/* ── Animations ──────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease forwards;
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ── Custom Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent) 0%, var(--violet) 100%);
+  border-radius: 4px;
+}
+
+/* ── Input / Select Resets ───────────────────────────────────────── */
+input,
+select,
+textarea {
+  color: var(--text);
+  background: transparent;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-dim);
+}
+option {
+  background: #ffffff;
+  color: var(--text);
+}
+
+/* ── Gradient text ───────────────────────────────────────────────── */
+.grad-text {
+  background: var(--grad-main);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
