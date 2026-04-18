@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"return$\" /Users/user/Downloads/Personal_Files/Codes/3kapp/tasks.py)",
+      "Bash(python -c \"import pytest\")",
+      "Bash(/Users/user/Downloads/Personal_Files/Codes/3kapp/venv/bin/pip list *)",
+      "Bash(python3 -m venv venv --clear)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m pytest tests/test_openai_monitor.py tests/test_bulk_processing.py -v)",
+      "Bash(python -m pytest tests/test_send_email_endpoint.py tests/test_settings.py tests/test_dashboard_data.py -v)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/ -v --ignore=tests/test_tenant_isolation.py)",
+      "Bash(open -a Docker)",
+      "Bash(docker info *)",
+      "Bash(docker run *)",
+      "Bash(docker start *)",
+      "Bash(docker exec *)",
+      "Bash(psql postgresql://localhost:5432/moeen_dev -c \"\\\\du\")",
+      "Bash(psql \"postgresql://user@localhost:5432/moeen_dev\" -c \"\\\\dt\")",
+      "Bash(DATABASE_URL=\"postgresql://user@localhost:5432/moeen_dev\" python migrations/run_migration.py)",
+      "Bash(psql \"postgresql://user@localhost:5432/moeen_dev\")",
+      "Bash(psql postgresql://user@localhost:5432/moeen_dev -c ' *)",
+      "Bash(DATABASE_URL=\"postgresql://user@localhost:5432/moeen_dev\" REDIS_URL=\"redis://localhost:6379/0\" python -m pytest tests/ -v)",
+      "Bash(psql \"postgresql://user@localhost:5432/moeen_dev\" -c \"ALTER TABLE user_threads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW\\(\\);\")"
+    ]
+  }
+}

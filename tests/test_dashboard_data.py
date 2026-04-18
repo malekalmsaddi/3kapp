@@ -21,12 +21,17 @@ app.config['RATELIMIT_ENABLED'] = False
 limiter.enabled = False
 
 
-def test_dashboard_data_endpoint():
-    client = app.test_client()
-    with client.session_transaction() as sess:
-        sess['logged_in'] = True
+@pytest.fixture
+def client():
+    with app.test_client() as c:
+        yield c
 
-    res = client.get('/dashboard/data')
+
+def test_dashboard_data_endpoint(monkeypatch, client, auth_headers):
+    # Stub DB — dashboard_data wraps get_conn in try/except and returns zeros on failure
+    monkeypatch.setattr('blueprints.dashboard.get_conn', lambda: (_ for _ in ()).throw(RuntimeError('no db')))
+
+    res = client.get('/dashboard/data', headers=auth_headers)
     assert res.status_code == 200
     data = res.get_json()
     assert 'labels' in data

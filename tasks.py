@@ -9,7 +9,6 @@ import os
 import json
 import csv
 import io
-import redis
 import ssl
 import time
 from datetime import datetime, timezone

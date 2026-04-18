@@ -21,20 +21,24 @@ limiter.enabled = False
 app.config['WTF_CSRF_ENABLED'] = False
 
 
-def test_settings_toggle():
-    client = app.test_client()
-    with client.session_transaction() as sess:
-        sess['logged_in'] = True
-    # Ensure page loads
-    res = client.get('/settings')
+@pytest.fixture
+def client():
+    with app.test_client() as c:
+        yield c
+
+
+def test_settings_toggle(client, auth_headers):
+    # Default notify is True
+    res = client.get('/settings', headers=auth_headers)
     assert res.status_code == 200
-    # Disable notifications
-    res = client.post('/settings', data={})
-    assert res.status_code == 302
-    with client.session_transaction() as sess:
-        assert sess['notify'] is False
-    # Enable notifications
-    res = client.post('/settings', data={'notify': 'on'})
-    assert res.status_code == 302
-    with client.session_transaction() as sess:
-        assert sess['notify'] is True
+    assert res.get_json()['notify'] is True
+
+    # POST with no notify key → False
+    res = client.post('/settings', json={}, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.get_json()['notify'] is False
+
+    # POST with notify=True → True
+    res = client.post('/settings', json={'notify': True}, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.get_json()['notify'] is True

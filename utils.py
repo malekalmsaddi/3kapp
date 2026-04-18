@@ -5,7 +5,6 @@ import threading
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Content, Email, Mail, To
 from twilio.rest import Client
@@ -21,13 +20,6 @@ WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 TWILIO_SERVICE_SID = os.getenv("TWILIO_SERVICE_SID")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "no-reply@example.com")
-
-# OpenAI client
-try:
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-except Exception as exc:  # pragma: no cover - logging only
-    logger.warning(f"OpenAI client not initialized: {exc}")
-    openai_client = None
 
 # Lazy singletons for SendGrid and Twilio (initialized once on first use)
 _sg_client: Optional[SendGridAPIClient] = None
