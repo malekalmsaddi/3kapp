@@ -75,8 +75,9 @@ if REDIS_URL and REDIS_URL.startswith('rediss://'):
 
 celery_app.conf.update(**_celery_conf)
 
-def setup_loggers(logger_inst, *args, **kwargs):
-    logger_inst.setLevel(os.getenv('CELERY_LOG_LEVEL', 'INFO'))
+def setup_loggers(logger=None, **kwargs):
+    if logger:
+        logger.setLevel(os.getenv('CELERY_LOG_LEVEL', 'INFO'))
 after_setup_logger.connect(setup_loggers)
 
 # ── Legacy env-based config (used as fallback if tenant config unavailable) ──
