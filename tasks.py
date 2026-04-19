@@ -92,7 +92,7 @@ try:
     from services.usage_rollup import register_beat_schedule
     register_beat_schedule(celery_app)
 except Exception as e:
-    logger.warning(f'Could not register beat schedule: {e}')
+    logger.exception(f'Could not register beat schedule: {e}')
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tenant context loader

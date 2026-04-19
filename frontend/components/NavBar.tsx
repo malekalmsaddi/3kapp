@@ -38,13 +38,14 @@ export default function NavBar() {
   const [userInfo, setUserInfo] = useState<UserInfo>({});
 
   useEffect(() => {
-    // Fetch user info from JWT-aware endpoint
+    let mounted = true;
     fetch('/api/v1/auth/me', { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data) setUserInfo(data);
+        if (mounted && data) setUserInfo(data);
       })
       .catch(() => {});
+    return () => { mounted = false; };
   }, []);
 
   const isSuperAdmin = userInfo.role === 'super_admin';
@@ -55,16 +56,16 @@ export default function NavBar() {
 
   // Apply tenant branding if available
   useEffect(() => {
-    if (userInfo.brand_color_primary) {
-      document.documentElement.style.setProperty(
-        '--accent',
-        userInfo.brand_color_primary,
-      );
+    const isValidHex = (c: string) => /^#[0-9a-fA-F]{3,8}$/.test(c);
+    const primary = userInfo.brand_color_primary;
+    const secondary = userInfo.brand_color_secondary;
+    if (primary && isValidHex(primary)) {
+      document.documentElement.style.setProperty('--accent', primary);
     }
-    if (userInfo.brand_color_primary && userInfo.brand_color_secondary) {
+    if (primary && secondary && isValidHex(primary) && isValidHex(secondary)) {
       document.documentElement.style.setProperty(
         '--grad-main',
-        `linear-gradient(135deg, ${userInfo.brand_color_primary} 0%, ${userInfo.brand_color_secondary} 55%, #6d1f9e 100%)`,
+        `linear-gradient(135deg, ${primary} 0%, ${secondary} 55%, #6d1f9e 100%)`,
       );
     }
   }, [userInfo.brand_color_primary, userInfo.brand_color_secondary]);

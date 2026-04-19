@@ -61,7 +61,10 @@ def invalidate_tenant_cache(tenant_id: str) -> None:
     """Purge the cached config for a tenant (call after config changes)."""
     redis_connection.delete(f'tenant:{tenant_id}:config')
     redis_connection.delete(f'tenant:{tenant_id}:assistant_config')
-    redis_connection.delete(f'platform:tenant_slug_cache')  # slug lookup too
+    # Invalidate the per-slug cache entry (format must match resolve_tenant_by_slug)
+    tenant = get_tenant_by_id(tenant_id)
+    if tenant and tenant.get('slug'):
+        redis_connection.delete(f'platform:tenant_slug:{tenant["slug"]}')
 
 
 def resolve_tenant_by_slug(slug: str) -> dict | None:

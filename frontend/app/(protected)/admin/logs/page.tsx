@@ -62,8 +62,16 @@ export default function LogsPage() {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
-    return () => clearInterval(interval);
+    const tick = () => {
+      if (document.visibilityState === 'hidden') return;
+      fetchLogs();
+    };
+    const interval = setInterval(tick, 10000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [fetchLogs]);
 
   const displayPhone = (p: string) => p?.replace('whatsapp:', '').trim() ?? '—';

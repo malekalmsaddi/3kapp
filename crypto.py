@@ -76,6 +76,7 @@ TENANT_CONFIG_ENCRYPTED_FIELDS = [
     'twilio_account_sid',
     'twilio_auth_token',
     'sendgrid_api_key',
+    'calendar_credentials',
 ]
 
 ASSISTANT_CONFIG_ENCRYPTED_FIELDS = [

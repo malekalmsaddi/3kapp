@@ -30,7 +30,10 @@
       "Bash(grep -rn \"key={.*-\\\\${i}\" \"/Users/user/Downloads/Personal_Files/Codes/3kapp/frontend/app\" --include=\"*.tsx\")",
       "Bash(grep -E \"\\\\.py$|^d\")",
       "Bash(python3)",
-      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/Users/user/Downloads/Personal_Files/Codes/3kapp'\\); from blueprints.auth import auth_bp; print\\('auth.py loads ok'\\)\")"
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/Users/user/Downloads/Personal_Files/Codes/3kapp'\\); from blueprints.auth import auth_bp; print\\('auth.py loads ok'\\)\")",
+      "Bash(grep -n \"DO \\\\$\\\\$\" /Users/user/Downloads/Personal_Files/Codes/3kapp/migrations/001_multi_tenant_foundation.sql)",
+      "Bash(grep -n \"DO \\\\$\" /Users/user/Downloads/Personal_Files/Codes/3kapp/migrations/001_multi_tenant_foundation.sql)",
+      "Bash(python3 -m py_compile migrations/run_migration.py)"
     ]
   }
 }

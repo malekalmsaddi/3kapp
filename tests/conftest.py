@@ -20,6 +20,7 @@ os.environ.setdefault('TWILIO_WHATSAPP_NUMBER', '+1234567890')
 os.environ.setdefault('OPENAI_API_KEY', 'test')
 os.environ.setdefault('ASSISTANT_ID', 'test')
 os.environ.setdefault('REDIS_URL', 'redis://localhost:6379/0')
+os.environ.setdefault('DATABASE_URL', 'postgresql://localhost/test_moeen')
 os.environ.setdefault('ADMIN_USERNAME', 'admin')
 os.environ.setdefault('ADMIN_PASSWORD_HASH', 'hash')
 

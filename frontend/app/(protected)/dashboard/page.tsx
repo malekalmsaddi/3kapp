@@ -408,6 +408,7 @@ function lastInboundSentiment(msgs: Message[]): Sentiment | undefined {
 /* ── Dashboard Page ─────────────────────────────────────────────── */
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [dataError, setDataError] = useState(false);
   const [chartData, setChartData] = useState<ChartData | null>(null);
   const [chartError, setChartError] = useState(false);
   const [chartLoading, setChartLoading] = useState(true);
@@ -433,14 +434,15 @@ export default function DashboardPage() {
       });
       if (res.status === 304) return;
       if (!res.ok) {
-        console.error('[dashboard] fetch failed:', res.status);
+        setDataError(true);
         return;
       }
       const etag = res.headers.get('ETag');
       if (etag) dashboardEtag.current = etag;
       setData(await res.json());
-    } catch (err) {
-      console.error('[dashboard] fetch error:', err);
+      setDataError(false);
+    } catch {
+      setDataError(true);
     }
   }, []);
 
@@ -572,6 +574,20 @@ export default function DashboardPage() {
           Live · every 5s
         </div>
       </div>
+
+      {dataError && (
+        <div
+          className="px-4 py-3 rounded-xl text-sm"
+          role="alert"
+          style={{
+            background: 'rgba(176,9,9,0.06)',
+            border: '1px solid rgba(176,9,9,0.25)',
+            color: '#b00909',
+          }}
+        >
+          Could not load dashboard data. Retrying…
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

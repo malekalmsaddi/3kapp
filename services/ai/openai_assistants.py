@@ -22,6 +22,15 @@ from logati import logger
 
 BACKOFF_INTERVALS = [1, 2, 3, 5, 8, 13, 21, 34]
 
+# Atomic lock release: only delete if the value still matches our lock_id
+_RELEASE_LOCK_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+"""
+
 
 class PollTimeout(Exception):
     pass
@@ -339,7 +348,8 @@ class OpenAIAssistantsProvider(AIProvider):
             yield acquired
         finally:
             try:
-                if self._r.get(lock_key) == lock_id.encode():
-                    self._r.delete(lock_key)
+                # Atomic check-and-delete: only release if we still own the lock
+                real_key = self._r._k(lock_key)
+                self._r.raw.eval(_RELEASE_LOCK_LUA, 1, real_key, lock_id)
             except Exception as e:
                 logger.warning(f'Failed to release lock {lock_key}: {e}')

@@ -85,9 +85,10 @@ CREATE TABLE IF NOT EXISTS tenants (
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at            TIMESTAMPTZ
 );
-CREATE INDEX IF NOT EXISTS idx_tenants_slug    ON tenants(slug);
-CREATE INDEX IF NOT EXISTS idx_tenants_status  ON tenants(status) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_tenants_plan_id ON tenants(plan_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_slug              ON tenants(slug);
+CREATE INDEX IF NOT EXISTS idx_tenants_status            ON tenants(status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_tenants_plan_id           ON tenants(plan_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer   ON tenants(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
 
 -- Insert the default (legacy) tenant — all existing data will be assigned here.
 -- Fixed UUID so it can be referenced deterministically in application code.
@@ -125,11 +126,13 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (tenant_id, email)
 );
-CREATE INDEX IF NOT EXISTS idx_users_tenant_id    ON users(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_role         ON users(role);
-CREATE INDEX IF NOT EXISTS idx_users_verify_token ON users(email_verify_token)
+CREATE INDEX IF NOT EXISTS idx_users_tenant_id      ON users(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_users_email          ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role           ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_verify_token   ON users(email_verify_token)
     WHERE email_verify_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_reset_token    ON users(password_reset_token)
+    WHERE password_reset_token IS NOT NULL;
 
 -- =============================================================================
 -- 4. TENANT CONFIGS

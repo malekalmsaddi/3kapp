@@ -39,7 +39,7 @@ export default function AuthGuard({ children }: PropsWithChildren) {
             const refreshed = await tryRefresh();
             if (cancelled) return;
             if (refreshed) {
-              verify(1);
+              await verify(1);
             } else {
               router.replace('/login');
             }
