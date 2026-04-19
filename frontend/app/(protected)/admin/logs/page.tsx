@@ -171,7 +171,7 @@ export default function LogsPage() {
                   className="divide-y divide-gray-100"
                 >
                   {messages.map((m, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
+                    <tr key={`${m.timestamp}-${m.phone}-${i}`} className="hover:bg-gray-50">
                       <td
                         className="py-2 pr-4 text-xs whitespace-nowrap font-mono"
                         style={{ color: 'var(--text-dim)' }}
@@ -228,7 +228,7 @@ export default function LogsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {bulkLogs.map((l, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
+                  <tr key={`${l.to ?? ''}-${l.result ?? ''}-${i}`} className="hover:bg-gray-50">
                     <td
                       className="py-2 pr-4 font-mono text-xs"
                       style={{ color: 'var(--text-muted)' }}

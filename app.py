@@ -113,13 +113,11 @@ app.register_blueprint(admin_bp,     url_prefix='/api/v1/admin', name='admin_v1'
 app.register_blueprint(settings_bp,  url_prefix='/api/v1', name='settings_v1')
 
 # ── Apply rate limits to specific blueprints ────────────────────────────────
+# settings_bp is exempt (hosts /health) — no explicit limit applied
 limiter.limit('5 per minute')(auth_bp)
 limiter.limit('200 per minute')(dashboard_bp)
-limiter.limit('50 per minute')(settings_bp)
 limiter.limit('20 per minute')(messaging_bp)
-
-# Exempt health check from rate limiting
-limiter.exempt(settings_bp)  # /health lives here and needs to be exempt
+limiter.exempt(settings_bp)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Heartbeat thread

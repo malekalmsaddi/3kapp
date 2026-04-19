@@ -1,19 +1,5 @@
-import os
 import pytest
-import sys
-from pathlib import Path
 
-os.environ.setdefault('TWILIO_ACCOUNT_SID', 'test')
-os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test')
-os.environ.setdefault('TWILIO_WHATSAPP_NUMBER', 'test')
-os.environ.setdefault('OPENAI_API_KEY', 'test')
-os.environ.setdefault('ASSISTANT_ID', 'test')
-os.environ.setdefault('REDIS_URL', 'redis://localhost:6379/0')
-os.environ.setdefault('FLASK_SECRET_KEY', 'secret')
-os.environ.setdefault('ADMIN_USERNAME', 'admin')
-os.environ.setdefault('ADMIN_PASSWORD_HASH', 'hash')
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app import app, limiter
 
 app.config['RATELIMIT_ENABLED'] = False

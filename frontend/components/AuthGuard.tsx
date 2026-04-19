@@ -16,7 +16,7 @@ export default function AuthGuard({ children }: PropsWithChildren) {
 
     async function verify(attempt: number) {
       try {
-        const res = await fetch('/api/dashboard/data', {
+        const res = await fetch('/api/v1/auth/me', {
           credentials: 'include',
         });
         if (cancelled) return;

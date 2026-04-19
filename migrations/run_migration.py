@@ -57,10 +57,11 @@ def encrypt_value(value: str) -> str:
     try:
         from crypto import encrypt
         return encrypt(value)
-    except ImportError:
-        # crypto.py not yet created — store plaintext temporarily
-        print("  ⚠️  crypto.py not found — storing plaintext (update after crypto.py is created)")
-        return value
+    except ImportError as e:
+        raise RuntimeError(
+            'crypto.py not found — cannot run migration without encryption. '
+            'Ensure crypto.py exists and ENCRYPTION_KEY is set before migrating.'
+        ) from e
 
 
 def seed_default_tenant_configs(conn):

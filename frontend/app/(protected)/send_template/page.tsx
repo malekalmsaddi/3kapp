@@ -732,7 +732,7 @@ export default function SendTemplatePage() {
                 <tbody>
                   {rows.map((row, i) => (
                     <tr
-                      key={i}
+                      key={`${row.to}-${i}`}
                       className="transition-colors"
                       style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}
                       onMouseEnter={(e) =>
@@ -920,7 +920,7 @@ export default function SendTemplatePage() {
                         ? '#b00909'
                         : 'var(--text-muted)';
                 return (
-                  <div key={i} className="text-xs flex gap-3 items-start">
+                  <div key={`${log.to}-${i}`} className="text-xs flex gap-3 items-start">
                     <span
                       className="font-mono shrink-0"
                       style={{ color: 'var(--text-dim)' }}

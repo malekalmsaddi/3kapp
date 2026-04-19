@@ -21,7 +21,13 @@
       "Bash(psql \"postgresql://user@localhost:5432/moeen_dev\")",
       "Bash(psql postgresql://user@localhost:5432/moeen_dev -c ' *)",
       "Bash(DATABASE_URL=\"postgresql://user@localhost:5432/moeen_dev\" REDIS_URL=\"redis://localhost:6379/0\" python -m pytest tests/ -v)",
-      "Bash(psql \"postgresql://user@localhost:5432/moeen_dev\" -c \"ALTER TABLE user_threads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW\\(\\);\")"
+      "Bash(psql \"postgresql://user@localhost:5432/moeen_dev\" -c \"ALTER TABLE user_threads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW\\(\\);\")",
+      "Bash(python3 -m py_compile app.py db.py crypto.py redis_client.py middleware/jwt_middleware.py blueprints/*.py services/auth_service.py services/tenant_service.py services/ai/factory.py tasks.py)",
+      "Bash(python3 -m py_compile /Users/user/Downloads/Personal_Files/Codes/3kapp/app.py)",
+      "Bash(python3 -c \"import pytest; print\\(pytest.__version__\\)\")",
+      "Bash(grep -r \"fetch\\(\" \"/Users/user/Downloads/Personal_Files/Codes/3kapp/frontend/app\" --include=\"*.tsx\" ! -path \"*/.next/*\")",
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/Users/user/Downloads/Personal_Files/Codes/3kapp'\\); from blueprints import auth\")",
+      "Bash(grep -rn \"key={.*-\\\\${i}\" \"/Users/user/Downloads/Personal_Files/Codes/3kapp/frontend/app\" --include=\"*.tsx\")"
     ]
   }
 }

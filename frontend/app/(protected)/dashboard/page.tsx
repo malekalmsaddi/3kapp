@@ -974,7 +974,7 @@ export default function DashboardPage() {
           >
             {selected.map((msg, i) => (
               <div
-                key={`${msg.timestamp}-${i}`}
+                key={`${msg.timestamp}-${msg.direction}-${i}`}
                 className={`flex ${msg.direction === 'inbound' ? 'justify-start' : 'justify-end'}`}
               >
                 <div

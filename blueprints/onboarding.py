@@ -148,7 +148,7 @@ def onboarding_calendar():
         'calendar_enabled': True,
         'calendar_id': calendar_id,
         'calendar_timezone': timezone,
-        'calendar_credentials': json.dumps(credentials),
+        'calendar_credentials': encrypt(json.dumps(credentials)),
     })
     update_onboarding_step(tenant_id, 'branding', ['assistant', 'whatsapp', 'calendar'])
     invalidate_tenant_cache(tenant_id)

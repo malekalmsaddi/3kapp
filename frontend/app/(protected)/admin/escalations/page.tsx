@@ -42,6 +42,7 @@ export default function EscalationsPage() {
   }, [fetchEscalations]);
 
   async function handleResolve(phone: string) {
+    setError('');
     setResolving(phone);
     try {
       await fetch(`/api/admin/escalations/${encodeURIComponent(phone)}/resolve`, {
@@ -58,6 +59,7 @@ export default function EscalationsPage() {
 
   async function handleReply(phone: string) {
     if (!replyMsg.trim()) return;
+    setError('');
     try {
       await fetch('/api/admin/respond', {
         method: 'POST',

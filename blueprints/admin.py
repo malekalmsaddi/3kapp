@@ -38,16 +38,16 @@ def admin_dashboard():
     r = get_tenant_redis(tenant_id)
     filter_term = request.args.get('filter', '').lower()
 
-    # Rate limiter keys (global — not tenant-scoped)
+    # Rate limiter keys (scoped to this tenant's IP/identity patterns)
     limiter_results = {}
-    for k in redis_connection.scan_iter('LIMITER/*', count=100):
+    for k in r.scan_iter('LIMITER/*', count=100):
         if len(limiter_results) >= 500:
             break
         try:
             name = k.decode()
             if filter_term and filter_term not in name.lower():
                 continue
-            val = redis_connection.get(k)
+            val = r.raw.get(k)
             limiter_results[name] = val.decode() if val else ''
         except Exception:
             pass
@@ -145,7 +145,7 @@ def admin_respond():
     ts   = datetime.now(timezone.utc).isoformat()
 
     if not user or not msg:
-        abort(400, 'Missing fields')
+        abort(400, 'Missing required fields: user_number and message')
 
     try:
         if mode == 'user_to_bot':
@@ -169,8 +169,8 @@ def admin_respond():
         )
         return jsonify({'status': 'ok', 'to': user})
     except Exception as e:
-        logger.error(f'Respond error: {e}')
-        abort(500, 'Error responding')
+        logger.exception(f'Admin respond error for {user}: {e}')
+        abort(500, f'Failed to send response: {type(e).__name__}')
 
 
 @admin_bp.route('/escalations')

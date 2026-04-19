@@ -348,16 +348,24 @@ CREATE INDEX IF NOT EXISTS idx_user_threads_last_accessed_tenant
 -- =============================================================================
 -- 16. MIGRATE admins → users  (idempotent via ON CONFLICT DO NOTHING)
 -- =============================================================================
-INSERT INTO users (tenant_id, email, password_hash, role, email_verified, created_at)
-SELECT
-    '00000000-0000-0000-0000-000000000001'::uuid,
-    username,       -- username treated as email (may not be email format — that's OK)
-    password_hash,
-    'tenant',
-    TRUE,           -- existing admins are pre-verified
-    created_at
-FROM admins
-ON CONFLICT (tenant_id, email) DO NOTHING;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'admins'
+    ) THEN
+        INSERT INTO users (tenant_id, email, password_hash, role, email_verified, created_at)
+        SELECT
+            '00000000-0000-0000-0000-000000000001'::uuid,
+            username,       -- username treated as email (may not be email format — that's OK)
+            password_hash,
+            'tenant',
+            TRUE,           -- existing admins are pre-verified
+            created_at
+        FROM admins
+        ON CONFLICT (tenant_id, email) DO NOTHING;
+    END IF;
+END $$;
 
 -- =============================================================================
 -- 17. SEED DEFAULT TENANT'S CONFIG ROWS

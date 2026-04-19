@@ -76,9 +76,13 @@ def init_jwt_middleware(app):
             except jwt.InvalidTokenError:
                 abort(401)
 
-            # Check if token has been revoked
+            # Check if token has been revoked; fail secure if Redis is unavailable
             jti = payload.get('jti')
-            if jti and redis_connection.get(f'revoked_jti:{jti}'):
+            try:
+                if jti and redis_connection.get(f'revoked_jti:{jti}'):
+                    abort(401)
+            except Exception:
+                logger.error('Redis unavailable for JWT revocation check — denying access')
                 abort(401)
 
             g.user_id       = payload.get('sub')

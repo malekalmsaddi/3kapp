@@ -1,22 +1,8 @@
-import os
-import sys
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
-os.environ.setdefault('TWILIO_ACCOUNT_SID', 'test')
-os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test')
-os.environ.setdefault('TWILIO_WHATSAPP_NUMBER', '+1234567890')
-os.environ.setdefault('OPENAI_API_KEY', 'test')
-os.environ.setdefault('ASSISTANT_ID', 'test')
-os.environ.setdefault('REDIS_URL', 'redis://localhost:6379/0')
-os.environ.setdefault('FLASK_SECRET_KEY', 'secret')
-os.environ.setdefault('ADMIN_USERNAME', 'admin')
-os.environ.setdefault('ADMIN_PASSWORD_HASH', 'hash')
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-from tasks import monitor_openai_thread_and_flush  # noqa: E402
+from tasks import monitor_openai_thread_and_flush
 
 _UNSET = object()
 

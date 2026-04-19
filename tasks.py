@@ -179,7 +179,6 @@ def process_openai(self, tenant_id: str, user_number: str, user_message: str = '
             return {'status': 'escalated', 'to': user_number}
 
         if response == '':
-            from tasks import monitor_openai_thread_and_flush
             monitor_openai_thread_and_flush.delay(tenant_id, user_number)
             return {'status': 'queued', 'to': user_number}
 
@@ -332,6 +331,7 @@ def send_bulk_contacts(self, tenant_id: str, payload: list, content_sid: str = N
             pass
 
     log_usage_event(tenant_id, 'bulk.send', quantity=len(seen))
+    return {'status': 'completed', 'total': len(seen)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

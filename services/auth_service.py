@@ -44,11 +44,15 @@ def create_refresh_token(user: dict) -> str:
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     # Store refresh JTI for validation and revocation
-    redis_connection.setex(
-        f'refresh_jti:{jti}',
-        int(REFRESH_TOKEN_EXPIRY.total_seconds()),
-        str(user['id']),
-    )
+    try:
+        redis_connection.setex(
+            f'refresh_jti:{jti}',
+            int(REFRESH_TOKEN_EXPIRY.total_seconds()),
+            str(user['id']),
+        )
+    except Exception as e:
+        logger.error(f'Failed to store refresh JTI in Redis: {e}')
+        raise RuntimeError('Authentication service unavailable') from e
     return token
 
 
