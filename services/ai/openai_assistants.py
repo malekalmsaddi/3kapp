@@ -121,7 +121,7 @@ class OpenAIAssistantsProvider(AIProvider):
         if not queued:
             return None
 
-        prompts = [q.decode() for q in queued]
+        prompts = [q.decode('utf-8', errors='replace') if isinstance(q, bytes) else str(q) for q in queued]
         combined = '\n\n'.join(f'User message {i+1}: {m}' for i, m in enumerate(prompts))
         self._r.delete(queue_key)
 

@@ -34,10 +34,18 @@ def build_ai_config(raw: dict) -> AIConfig:
         import json
         tools = json.loads(tools)
 
+    api_key      = raw.get('openai_api_key', '')
+    assistant_id = raw.get('assistant_id', '')
+    if not api_key or not assistant_id:
+        raise ValueError(
+            f'AI config is missing required fields: '
+            f'{"openai_api_key" if not api_key else "assistant_id"}'
+        )
+
     return AIConfig(
         provider=raw.get('provider', 'openai_assistants'),
-        api_key=raw.get('openai_api_key', ''),
-        assistant_id=raw.get('assistant_id', ''),
+        api_key=api_key,
+        assistant_id=assistant_id,
         model=raw.get('model', 'gpt-4o'),
         tools_enabled=tools,
         temperature=float(raw['temperature']) if raw.get('temperature') is not None else None,

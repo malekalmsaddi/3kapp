@@ -11,8 +11,21 @@ export default function AuthGuard({ children }: PropsWithChildren) {
   useEffect(() => {
     // Session cookie is HttpOnly — unreadable by JS.
     // Verify auth by pinging an authenticated endpoint.
-    // Only redirect on explicit 401; a network error should not log the user out.
+    // On 401, attempt a silent token refresh before giving up.
+    // Only redirect on confirmed 401 after refresh; a network error should not log the user out.
     let cancelled = false;
+
+    async function tryRefresh(): Promise<boolean> {
+      try {
+        const res = await fetch('/api/v1/auth/refresh', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
 
     async function verify(attempt: number) {
       try {
@@ -21,7 +34,18 @@ export default function AuthGuard({ children }: PropsWithChildren) {
         });
         if (cancelled) return;
         if (res.status === 401) {
-          router.replace('/login');
+          // Attempt one silent refresh before redirecting to login.
+          if (attempt === 0) {
+            const refreshed = await tryRefresh();
+            if (cancelled) return;
+            if (refreshed) {
+              verify(1);
+            } else {
+              router.replace('/login');
+            }
+          } else {
+            router.replace('/login');
+          }
         } else {
           setNetworkError(false);
           setChecking(false);

@@ -399,7 +399,7 @@ const panel: React.CSSProperties = {
 function lastInboundSentiment(msgs: Message[]): Sentiment | undefined {
   for (let i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].direction === 'inbound' && msgs[i].sentiment) {
-      return msgs[i].sentiment as Sentiment;
+      return msgs[i].sentiment;
     }
   }
   return undefined;
@@ -432,12 +432,15 @@ export default function DashboardPage() {
         headers,
       });
       if (res.status === 304) return;
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.error('[dashboard] fetch failed:', res.status);
+        return;
+      }
       const etag = res.headers.get('ETag');
       if (etag) dashboardEtag.current = etag;
       setData(await res.json());
-    } catch {
-      /* silent */
+    } catch (err) {
+      console.error('[dashboard] fetch error:', err);
     }
   }, []);
 

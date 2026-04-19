@@ -202,6 +202,7 @@ def process_openai(self, tenant_id: str, user_number: str, user_message: str = '
             self.retry(countdown=int(os.getenv('TASK_RETRY_DELAY', 10)))
         except MaxRetriesExceededError:
             notify_error(user_number, '⚠️ Something went wrong. Please try again.')
+            return {'status': 'failed', 'to': user_number, 'reason': 'max_retries_exceeded'}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -387,10 +388,9 @@ def send_whatsapp_template(self, tenant_id: str, to: str, params: dict = None, c
 # Task: process_bulk_file
 # ─────────────────────────────────────────────────────────────────────────────
 
-@shared_task(bind=True, max_retries=2,
-             soft_time_limit=TASK_TIMEOUTS['process_bulk'][0],
+@shared_task(soft_time_limit=TASK_TIMEOUTS['process_bulk'][0],
              time_limit=TASK_TIMEOUTS['process_bulk'][1])
-def process_bulk_file(self, tenant_id: str, file_contents: str = ''):
+def process_bulk_file(tenant_id: str, file_contents: str = ''):
 
     results = defaultdict(list)
     reader = csv.DictReader(io.StringIO(file_contents))

@@ -81,7 +81,7 @@ def seed_default_tenant_configs(conn):
     calendar_b64       = os.getenv('GOOGLE_CALENDAR_CREDENTIALS_B64', '')
     calendar_id        = os.getenv('GOOGLE_CALENDAR_ID', '')
     calendar_user      = os.getenv('GOOGLE_CALENDAR_USER', '')
-    calendar_tz        = 'Asia/Qatar'  # current hardcoded default
+    calendar_tz        = os.getenv('DEFAULT_TZ', 'Asia/Qatar')
 
     openai_key         = os.getenv('OPENAI_API_KEY', '')
     assistant_id       = os.getenv('ASSISTANT_ID', '')

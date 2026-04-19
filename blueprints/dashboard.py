@@ -12,14 +12,16 @@ from flask import Blueprint, request, jsonify, abort, Response, g
 from psycopg2.extras import RealDictCursor
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from db import get_conn, LEGACY_TENANT_ID
+from db import get_conn
 from logati import logger
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
 
 def _get_tenant_id() -> str:
-    return g.tenant_id or LEGACY_TENANT_ID
+    if not g.tenant_id:
+        abort(401)
+    return g.tenant_id
 
 
 @dashboard_bp.route('/dashboard', methods=['GET', 'POST'])
@@ -116,31 +118,31 @@ def dashboard_data():
 
     try:
         with get_conn() as conn:
-            cur = conn.cursor()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
                 """
-                SELECT date_trunc('minute', timestamp) AS minute, direction, COUNT(*)
+                SELECT date_trunc('minute', timestamp) AS minute, direction, COUNT(*) AS cnt
                 FROM messages
                 WHERE tenant_id = %s AND timestamp >= NOW() - INTERVAL '10 minutes'
                 GROUP BY minute, direction
                 """,
                 (tenant_id,),
             )
-            for minute, direction, count in cur.fetchall():
-                label = minute.strftime('%H:%M')
-                if direction == 'inbound':
-                    inbound_counts[label] = count
+            for row in cur.fetchall():
+                label = row['minute'].strftime('%H:%M')
+                if row['direction'] == 'inbound':
+                    inbound_counts[label] = row['cnt']
                 else:
-                    outbound_counts[label] = count
+                    outbound_counts[label] = row['cnt']
 
             cur.execute(
                 """
-                SELECT COUNT(*) FROM user_threads
+                SELECT COUNT(*) AS cnt FROM user_threads
                 WHERE tenant_id = %s AND escalation_status = 'escalated'
                 """,
                 (tenant_id,),
             )
-            escalated_count = cur.fetchone()[0]
+            escalated_count = cur.fetchone()['cnt']
     except Exception as e:
         logger.error(f'📊 [dashboard_data] error: {e}', exc_info=True)
 

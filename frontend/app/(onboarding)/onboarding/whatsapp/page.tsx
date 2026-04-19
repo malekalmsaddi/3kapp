@@ -52,7 +52,7 @@ export default function OnboardingWhatsAppPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.tenant_slug) {
-          setWebhookUrl(`/whatsapp/${data.tenant_slug}`);
+          setWebhookUrl(`${window.location.origin}/whatsapp/${data.tenant_slug}`);
         }
       })
       .catch(() => {});
@@ -75,7 +75,7 @@ export default function OnboardingWhatsAppPage() {
             Your Webhook URL
           </p>
           <code className="text-sm font-mono" style={{ color: '#b00909' }}>
-            https://your-domain.com{webhookUrl}
+            {webhookUrl}
           </code>
           <p className="text-xs mt-2" style={{ color: 'var(--text-dim)' }}>
             Paste this URL in your Twilio WhatsApp Sandbox or number configuration.

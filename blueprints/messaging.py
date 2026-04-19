@@ -15,7 +15,6 @@ import hashlib
 from flask import Blueprint, request, jsonify, abort, g
 from itsdangerous import URLSafeSerializer
 
-from db import LEGACY_TENANT_ID
 from logati import logger
 from redis_client import redis_connection, get_tenant_redis
 from utils import normalize_phone
@@ -25,7 +24,9 @@ messaging_bp = Blueprint('messaging', __name__)
 
 
 def _get_tenant_id() -> str:
-    return g.tenant_id or LEGACY_TENANT_ID
+    if not g.tenant_id:
+        abort(401)
+    return g.tenant_id
 
 
 @messaging_bp.route('/send_template', methods=['POST'])
@@ -70,11 +71,9 @@ def start_bulk_send():
             config, _ = load_tenant_context(tenant_id)
             bulk_max_batch = config.get('bulk_max_batch', 500)
             bulk_daily_cap = config.get('bulk_daily_cap', 1000)
-            bulk_msg_delay = float(config.get('bulk_msg_delay_sec', 1.5))
         except Exception:
             bulk_max_batch = int(os.getenv('BULK_MAX_BATCH', 500))
             bulk_daily_cap = int(os.getenv('BULK_DAILY_CAP', 1000))
-            bulk_msg_delay = float(os.getenv('BULK_MSG_DELAY', 1.5))
 
         batch_size = len(payload)
         if batch_size == 0:

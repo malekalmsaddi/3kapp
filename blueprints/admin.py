@@ -16,7 +16,7 @@ from psycopg2.extras import RealDictCursor
 
 from db import (
     get_conn, get_escalated_threads, set_escalation_status,
-    log_message, log_audit, LEGACY_TENANT_ID,
+    log_message, log_audit,
 )
 from logati import logger
 from redis_client import redis_connection, get_tenant_redis
@@ -26,7 +26,9 @@ admin_bp = Blueprint('admin', __name__)
 
 
 def _get_tenant_id() -> str:
-    return g.tenant_id or LEGACY_TENANT_ID
+    if not g.tenant_id:
+        abort(401)
+    return g.tenant_id
 
 
 @admin_bp.route('/dashboard')
@@ -38,9 +40,9 @@ def admin_dashboard():
     r = get_tenant_redis(tenant_id)
     filter_term = request.args.get('filter', '').lower()
 
-    # Rate limiter keys (scoped to this tenant's IP/identity patterns)
+    # Rate limiter keys are stored globally (not tenant-prefixed) by Flask-Limiter.
     limiter_results = {}
-    for k in r.scan_iter('LIMITER/*', count=100):
+    for k in r.raw.scan_iter(match='LIMITER/*', count=100):
         if len(limiter_results) >= 500:
             break
         try:
@@ -81,7 +83,7 @@ def admin_dashboard():
                 """,
                 (tenant_id,),
             )
-            thread_map = [dict(r) for r in cur.fetchall()]
+            thread_map = list(cur.fetchall())
 
             cur.execute(
                 """
@@ -92,7 +94,7 @@ def admin_dashboard():
                 """,
                 (tenant_id,),
             )
-            messages = [dict(r) for r in cur.fetchall()]
+            messages = list(cur.fetchall())
     except Exception as e:
         logger.error(f'Admin load error: {e}')
 
